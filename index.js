@@ -146,29 +146,53 @@ app.post('/logout', function (req, res) {
 });
 
 app.post('/addProduct', async (req, res) => {
-  try {
-      const { name, price, quantity } = req.body;
-  } catch (error) {
-      console.error('Error adding product:', error);
-      res.status(500).json({ error: 'Internal server error' });
-  }
+    const { name, price, quantity, amount } = req.body;
+    const { userId } = req.user;
+    const [insert] = await req.db.query(
+      `INSERT INTO products (name, price, quantity, amount) 
+      VALUES (:newName, :newPrice, :newQuantity, :newAmount);`, 
+      {
+        newName,
+        newPrice,
+        newQuantity,
+        newAmount
+    });
+
+    res.json({
+      id: insert.insertId,
+      newName,
+      newPrice,
+      newQuantity,
+      newAmount
+    });
 });
 
-app.delete('/deleteProduct/:productId', async (req, res) => {
-  try {
-      const productId = req.params.productId;
-  } catch (error) {
-      console.error('Error deleting product:', error);
-      res.status(500).json({ error: 'Internal server error' });
-  }
+app.delete('/deleteProduct/:ID', async (req, res) => {
+  const  { id: ID } = req.params;
+
+  await req.db.query(`UPDATE products SET deleted_flag = 1 WHERE id = :ID`, {ID});
+
+  res.json({success: true});
+
+  // try {
+  //     const productId = req.params.productId;
+  // } catch (error) {
+  //     console.error('Error deleting product:', error);
+  //     res.status(500).json({ error: 'Internal server error' });
+  // }
 });
 
 app.get('/products', async (req, res) => {
-  try {
+  const {id: ID} = req.params;
+
+  const [products] = await req.db.query(`SELECT * FROM products WHERE id = ID AND deleted_flag = 0;`, { ID })
+
+  res.json({ products });
+  // try {
       // Fetch products from the database
       // Send products to the client
-  } catch (error) {
-      console.error('Error fetching products:', error);
-      res.status(500).json({ error: 'Internal server error' });
-  }
+  // } catch (error) {
+  //     console.error('Error fetching products:', error);
+  //     res.status(500).json({ error: 'Internal server error' });
+  // }
 });

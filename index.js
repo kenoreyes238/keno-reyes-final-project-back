@@ -10,16 +10,12 @@ require('dotenv').config();
 const app = express();
 const port = process.env.PORT; 
 
-app.listen(port, () => {
-  console.log(`Server running on port ${port}`);
-})
-
 const corsOptions = {
-   origin: 'http://localhost:3000', 
-   credentials: true,  
-   'access-control-allow-credentials': true,
-   optionSuccessStatus: 200,
-}
+  origin: 'http://localhost:3000',
+  credentials: true,
+  'access-control-allow-credentials': true,
+  optionSuccessStatus: 200,
+};
 
 const pool = mysql.createPool({
     host: process.env.DB_HOST,
@@ -31,6 +27,10 @@ const pool = mysql.createPool({
 app.use(cors(corsOptions));
 
 app.use(bodyParser.json());
+
+app.use(express.json());
+
+app.use(require('cookie-parser')());
 
 app.use(async (req, res, next) => {
   try {
@@ -80,7 +80,7 @@ app.post('/login', async function (req, res) {
     if (!users) {
       return res.json({ error: 'Email not found', success: false });
     }
-    const hashedPassword = users.password;
+    const hashedPassword = `${users.password}`;
     const passwordMatches = await bcrypt.compare(userEnteredPassword, hashedPassword);
     if (passwordMatches) {
       const payload = {
@@ -100,6 +100,78 @@ app.post('/login', async function (req, res) {
   }
 });
 
+app.get('/products', async (req, res) => {
+  try {
+      const [rows] = await req.db.query('SELECT * FROM products WHERE deleted_flag = 0');
+      res.json(rows);
+  } catch (error) {
+      console.error(error);
+      res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+
+
+app.post('/addProduct', async (req, res) => {
+  try {
+    const { 
+      name, 
+      price, 
+      quantity, 
+      amount 
+    } = req.body;
+
+    const query = await req.db.query(
+      `INSERT INTO products (name, price, quantity, amount, deleted_flag) 
+      VALUES (:name, :price, :quantity, :amount, 0)`, 
+      {
+        name,
+        price,
+        quantity,
+        amount
+    });
+
+    res.json({ success: true, message: 'Item successfully added', data: null});
+  } catch (err) {
+    res.json({success: false, message: 'Failed to add item', data: null})
+  }
+});
+
+app.put('/editProduct/:id', async function(req,res) {
+  try {
+    const { id } = req.params;
+    const { name, price, quantity, amount } = req.body;
+    await req.db.query(
+      `UPDATE products SET name = ?, price = ?, quantity = ?, amount = ? WHERE id = ?`,
+      [name, price, quantity, amount, id]
+    );
+    res.json({ success: true, message: 'Item successfully updated'});
+  } catch (err) {
+    console.log(err);
+    res.status(500).json({ success: false, message: 'Failed to update item'});
+  }
+});
+
+app.delete('/deleteProduct/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    await req.db.query(`UPDATE products SET deleted_flag = 1 WHERE id = ?`, [id]);
+    res.json({ success: true, message: 'Item successfully deleted' });
+  } catch (err) {
+    console.log(err);
+    res.status(500).json({ success: false, message: 'Failed to delete item' });
+  }
+});
+
+app.post('/logout', function (req, res) {
+  try {
+    res.clearCookie('jwtToken'); // Clear the cookie named 'jwtToken'
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error during sign-out:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
 
 app.use(async function verifyJwt(req, res, next) {
   const { authorization: authHeader } = req.headers;
@@ -134,65 +206,6 @@ app.use(async function verifyJwt(req, res, next) {
   await next();
 });
 
-app.post('/logout', function (req, res) {
-  try {
-    res.clearCookie('jwtToken'); // Clear the cookie named 'jwtToken'
-
-    res.json({ success: true });
-  } catch (error) {
-    console.error('Error during sign-out:', error);
-    res.status(500).json({ error: 'Internal server error' });
-  }
-});
-
-app.post('/addProduct', async (req, res) => {
-    const { name, price, quantity, amount } = req.body;
-    const { userId } = req.user;
-    const [insert] = await req.db.query(
-      `INSERT INTO products (name, price, quantity, amount) 
-      VALUES (:newName, :newPrice, :newQuantity, :newAmount);`, 
-      {
-        newName,
-        newPrice,
-        newQuantity,
-        newAmount
-    });
-
-    res.json({
-      id: insert.insertId,
-      newName,
-      newPrice,
-      newQuantity,
-      newAmount
-    });
-});
-
-app.delete('/deleteProduct/:ID', async (req, res) => {
-  const  { id: ID } = req.params;
-
-  await req.db.query(`UPDATE products SET deleted_flag = 1 WHERE id = :ID`, {ID});
-
-  res.json({success: true});
-
-  // try {
-  //     const productId = req.params.productId;
-  // } catch (error) {
-  //     console.error('Error deleting product:', error);
-  //     res.status(500).json({ error: 'Internal server error' });
-  // }
-});
-
-app.get('/products', async (req, res) => {
-  const {id: ID} = req.params;
-
-  const [products] = await req.db.query(`SELECT * FROM products WHERE id = ID AND deleted_flag = 0;`, { ID })
-
-  res.json({ products });
-  // try {
-      // Fetch products from the database
-      // Send products to the client
-  // } catch (error) {
-  //     console.error('Error fetching products:', error);
-  //     res.status(500).json({ error: 'Internal server error' });
-  // }
-});
+app.listen(port, () => {
+  console.log(`Server running on http://localhost:${port}`);
+})

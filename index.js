@@ -4,6 +4,7 @@ const mysql = require('mysql2/promise');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 const bodyParser = require('body-parser');
+const cookieParser = require('cookie-parser');
 
 require('dotenv').config();
 
@@ -25,12 +26,9 @@ const pool = mysql.createPool({
 });
 
 app.use(cors(corsOptions));
-
 app.use(bodyParser.json());
-
 app.use(express.json());
-
-app.use(require('cookie-parser')());
+app.use(cookieParser());
 
 app.use(async (req, res, next) => {
   try {
@@ -100,68 +98,6 @@ app.post('/login', async function (req, res) {
   }
 });
 
-app.get('/products', async (req, res) => {
-  try {
-      const [rows] = await req.db.query('SELECT * FROM products WHERE deleted_flag = 0');
-      res.json(rows);
-  } catch (error) {
-      console.error(error);
-      res.status(500).json({ error: 'Internal Server Error' });
-  }
-});
-
-
-app.post('/addProduct', async (req, res) => {
-  try {
-    const { 
-      name, 
-      price, 
-      quantity, 
-      amount 
-    } = req.body;
-
-    const query = await req.db.query(
-      `INSERT INTO products (name, price, quantity, amount, deleted_flag) 
-      VALUES (:name, :price, :quantity, :amount, 0)`, 
-      {
-        name,
-        price,
-        quantity,
-        amount
-    });
-
-    res.json({ success: true, message: 'Item successfully added', data: null});
-  } catch (err) {
-    res.json({success: false, message: 'Failed to add item', data: null})
-  }
-});
-
-app.put('/editProduct/:id', async function(req,res) {
-  try {
-    const { id } = req.params;
-    const { name, price, quantity, amount } = req.body;
-    await req.db.query(
-      `UPDATE products SET name = ?, price = ?, quantity = ?, amount = ? WHERE id = ?`,
-      [name, price, quantity, amount, id]
-    );
-    res.json({ success: true, message: 'Item successfully updated'});
-  } catch (err) {
-    console.log(err);
-    res.status(500).json({ success: false, message: 'Failed to update item'});
-  }
-});
-
-app.delete('/deleteProduct/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    await req.db.query(`UPDATE products SET deleted_flag = 1 WHERE id = ?`, [id]);
-    res.json({ success: true, message: 'Item successfully deleted' });
-  } catch (err) {
-    console.log(err);
-    res.status(500).json({ success: false, message: 'Failed to delete item' });
-  }
-});
-
 app.post('/logout', function (req, res) {
   try {
     res.clearCookie('jwtToken'); // Clear the cookie named 'jwtToken'
@@ -170,6 +106,16 @@ app.post('/logout', function (req, res) {
   } catch (error) {
     console.error('Error during sign-out:', error);
     res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+app.get('/products', async (req, res) => {
+  try {
+      const [rows] = await req.db.query('SELECT * FROM products WHERE deleted_flag = 0');
+      res.json(rows);
+  } catch (error) {
+      console.error(error);
+      res.status(500).json({ error: 'Internal Server Error' });
   }
 });
 
@@ -206,6 +152,46 @@ app.use(async function verifyJwt(req, res, next) {
   await next();
 });
 
+app.post('/addProduct', async (req, res) => {
+  try {
+    const { name, price, quantity, amount } = req.body;
+    await req.db.query(
+      `INSERT INTO products (name, price, quantity, amount, deleted_flag) VALUES (:name, :price, :quantity, :amount, 0)`, 
+      { name, price, quantity, amount }
+    );
+    res.json({ success: true, message: 'Item successfully added', data: null });
+  } catch (err) {
+    console.error('Error in /addProduct:', err);
+    res.status(500).json({ success: false, message: 'Failed to add item', data: null });
+  }
+});
+
+app.put('/editProduct/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, price, quantity, amount } = req.body;
+    await req.db.query(
+      `UPDATE products SET name = ?, price = ?, quantity = ?, amount = ? WHERE id = ?`,
+      [name, price, quantity, amount, id]
+    );
+    res.json({ success: true, message: 'Item successfully updated' });
+  } catch (err) {
+    console.error('Error in /editProduct:', err);
+    res.status(500).json({ success: false, message: 'Failed to update item' });
+  }
+});
+
+app.delete('/deleteProduct/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    await req.db.query(`UPDATE products SET deleted_flag = 1 WHERE id = ?`, [id]);
+    res.json({ success: true, message: 'Item successfully deleted' });
+  } catch (err) {
+    console.error('Error in /deleteProduct:', err);
+    res.status(500).json({ success: false, message: 'Failed to delete item' });
+  }
+});
+
 app.listen(port, () => {
   console.log(`Server running on http://localhost:${port}`);
-})
+});
